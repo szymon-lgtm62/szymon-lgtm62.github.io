@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#E7ECE4">
+<title>Plan dnia</title>
+<style>
+  :root{
+    --tlo:#E7ECE4;
+    --tlo-kropka:#C9D4C4;
+    --atrament:#1C3A2E;
+    --atrament-jasny:#4C6B5D;
+    --papier:#FFFFFF;
+    --kosz:#2F4A3E;
+    --kosz-jasny:#54806C;
+    --posilek:#D2551F;
+    --higiena:#1F6FB8;
+    --zabawa:#3E8C1E;
+    --nauka:#C22B67;
+    --odpoczynek:#5A42B5;
+    --dzien:#B0790A;
+    --r:18px;
+    --luz:clamp(14px,1.8vw,28px);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+
+  body{
+    font-family:"Trebuchet MS","Segoe UI",Verdana,sans-serif;
+    color:var(--atrament);
+    background-color:var(--tlo);
+    background-image:radial-gradient(var(--tlo-kropka) 1.5px, transparent 1.6px);
+    background-size:22px 22px;
+    display:flex;flex-direction:column;
+    -webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+
+  /* ---------- pasek górny ---------- */
+  .pasek{
+    position:relative;flex:0 0 auto;
+    display:flex;align-items:center;gap:clamp(10px,1.6vw,28px);
+    padding:clamp(10px,1.6vh,20px) clamp(52px,5vw,64px) clamp(10px,1.6vh,20px) clamp(16px,2vw,34px);
+    background:var(--papier);border-bottom:3px solid #D6DFD2;
+    transition:padding .25s ease;
+  }
+  .tytul{display:flex;align-items:center;gap:clamp(8px,1.2vw,18px);min-width:0}
+  .awatar{
+    flex:0 0 auto;width:clamp(38px,7vh,72px);height:clamp(38px,7vh,72px);
+    border-radius:50%;object-fit:cover;border:3px solid #E2E9DE;background:#F1F5EF;
+  }
+  .awatar[hidden]{display:none}
+  .tytul h1{font-size:clamp(18px,3.1vh,34px);line-height:1;letter-spacing:-.01em}
+  .tytul p{font-size:clamp(12px,1.9vh,19px);color:var(--atrament-jasny);margin-top:.25em}
+  .zegar{margin-left:auto;text-align:right;line-height:1.05}
+  .zegar b{display:block;font-size:clamp(20px,4vh,44px);font-variant-numeric:tabular-nums}
+  .zegar span{font-size:clamp(11px,1.7vh,17px);color:var(--atrament-jasny)}
+
+  .narzedzia{display:flex;gap:clamp(6px,.8vw,12px)}
+  .ikonka{
+    width:clamp(42px,6.4vh,62px);height:clamp(42px,6.4vh,62px);
+    border-radius:50%;border:2px solid #CBD6C6;background:#F4F7F2;
+    color:var(--atrament);font-size:clamp(18px,3vh,28px);line-height:1;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;
+  }
+  .ikonka:hover{background:#E8EFE5}
+  .ikonka[disabled]{opacity:.32;cursor:default}
+  .ikonka[disabled]:hover{background:#F4F7F2}
+
+  .zwin{
+    position:absolute;top:50%;right:clamp(10px,1.2vw,18px);transform:translateY(-50%);
+    width:clamp(34px,4.6vh,44px);height:clamp(34px,4.6vh,44px);
+    border-radius:50%;border:2px solid #CBD6C6;background:#F4F7F2;
+    color:var(--atrament);font-size:clamp(14px,2.2vh,20px);line-height:1;cursor:pointer;
+  }
+  .zwin:hover{background:#E8EFE5}
+
+  body.zwiniety .pasek{padding-top:6px;padding-bottom:6px}
+  body.zwiniety .tytul h1{font-size:clamp(14px,2.2vh,20px)}
+  body.zwiniety .tytul p,body.zwiniety .zegar span{display:none}
+  body.zwiniety .awatar{width:clamp(26px,3.4vh,36px);height:clamp(26px,3.4vh,36px)}
+  body.zwiniety .zegar b{font-size:clamp(16px,2.6vh,26px)}
+  body.zwiniety .ikonka{width:clamp(32px,4.4vh,40px);height:clamp(32px,4.4vh,40px);font-size:clamp(14px,2.2vh,19px)}
+  body.zwiniety .zwin{transform:translateY(-50%) rotate(180deg)}
+
+  button:focus-visible,.karta:focus-visible,input:focus-visible,select:focus-visible{
+    outline:4px solid #1F6FB8;outline-offset:3px
+  }
+
+  /* ---------- plansza + kosz ---------- */
+  main{
+    flex:1 1 auto;min-height:0;display:flex;
+    gap:clamp(12px,1.6vw,26px);
+    padding:clamp(12px,1.8vh,24px) var(--luz);
+  }
+  .plansza{
+    flex:1 1 auto;min-width:0;
+    display:grid;
+    gap:var(--gap,clamp(8px,1.4vh,18px));
+    grid-auto-rows:minmax(0,1fr);
+  }
+  .rail{
+    flex:0 0 clamp(130px,15vw,230px);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:clamp(8px,1.6vh,18px);
+  }
+
+  /* ---------- karta ---------- */
+  .karta{
+    --dx:0px;--dy:0px;--sc:1;--rot:var(--tilt,0deg);
+    position:relative;
+    font-size:calc(clamp(11px,1.85vh,19px) * var(--skala,1));
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.3em;
+    padding:clamp(6px,1.1vh,14px);border-radius:var(--r);
+    background:var(--kolor);color:#fff;
+    box-shadow:0 6px 0 rgba(0,0,0,.16), 0 10px 22px rgba(20,40,30,.18);
+    transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(var(--sc));
+    cursor:grab;touch-action:none;overflow:hidden;
+  }
+  .karta .czas{
+    font-size:1em;font-weight:bold;
+    background:rgba(255,255,255,.24);padding:.18em .7em;border-radius:999px;
+    font-variant-numeric:tabular-nums;white-space:nowrap;
+  }
+  .karta .ikona{font-size:3.4em;line-height:1.05}
+  .karta .foto{
+    flex:1 1 auto;width:100%;min-height:0;position:relative;
+    border-radius:12px;overflow:hidden;background:rgba(255,255,255,.2);
+  }
+  .karta .foto img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+  .karta .nazwa{font-size:1.32em;font-weight:bold;text-align:center;line-height:1.15;text-wrap:balance}
+  .karta .opis{font-size:.86em;text-align:center;line-height:1.25;opacity:.9;text-wrap:balance}
+  .karta .ptaszek{display:none}
+
+  .karta.chwytana{
+    --sc:1.06;--rot:1.5deg;cursor:grabbing;z-index:50;
+    box-shadow:0 18px 44px rgba(20,40,30,.42);transition:none;
+  }
+  .karta.wraca,.karta.leci{transition:transform .32s cubic-bezier(.34,1.25,.64,1), opacity .3s}
+  .karta.leci{opacity:0}
+
+  .karta.teraz::after{
+    content:"teraz";position:absolute;top:0;right:0;
+    background:#fff;color:var(--kolor);font-size:.8em;font-weight:bold;
+    padding:.2em .8em;border-bottom-left-radius:12px;z-index:2;
+  }
+  .karta.teraz{
+    box-shadow:0 0 0 5px #fff, 0 0 0 9px var(--kolor), 0 10px 22px rgba(20,40,30,.2);
+    animation:tetno 2.4s ease-in-out infinite;
+  }
+  @keyframes tetno{50%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(1.03)}}
+
+  .karta.zrobiona{
+    background:transparent;color:var(--atrament-jasny);
+    box-shadow:none;border:3px dashed #B9C6B4;cursor:default;animation:none;
+  }
+  .karta.zrobiona .ikona,.karta.zrobiona::after,.karta.zrobiona .opis{display:none}
+  .karta.zrobiona .foto{opacity:.35;filter:grayscale(1)}
+  .karta.zrobiona .ptaszek{
+    display:block;font-size:3em;color:var(--zabawa);
+    text-shadow:0 2px 0 #fff,0 0 12px #fff;
+  }
+  .karta.zrobiona .foto .ptaszek{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;opacity:1}
+  .karta.zrobiona .czas{background:#DAE2D6;color:var(--atrament-jasny)}
+  .karta.zrobiona .nazwa{opacity:.6;text-decoration:line-through}
+
+  /* ---------- kosz ---------- */
+  .kosz{
+    position:relative;width:100%;height:32vh;max-height:42vh;
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+    transition:transform .2s;
+  }
+  @supports (aspect-ratio:1/1){
+    .kosz{height:auto;aspect-ratio:1/1.15}
+  }
+  .kubel{
+    width:78%;height:74%;background:var(--kosz);
+    clip-path:polygon(8% 0,92% 0,84% 100%,16% 100%);
+    display:flex;align-items:flex-start;justify-content:center;padding-top:12%;
+  }
+  .kubel::before{
+    content:"";width:52%;height:62%;
+    background:repeating-linear-gradient(90deg,var(--kosz-jasny) 0 6px,transparent 6px 20px);
+    opacity:.75;border-radius:4px;
+  }
+  .pokrywa{
+    position:absolute;top:6%;width:92%;height:11%;
+    background:var(--kosz-jasny);border-radius:8px;
+    transform-origin:12% 90%;transition:transform .22s ease-out;
+  }
+  .pokrywa::after{
+    content:"";position:absolute;left:50%;top:-42%;transform:translateX(-50%);
+    width:26%;height:46%;background:var(--kosz-jasny);border-radius:6px 6px 0 0;
+  }
+  .kosz.otwarty{transform:scale(1.06)}
+  .kosz.otwarty .pokrywa{transform:rotate(-38deg)}
+  .kosz.hop{animation:hop .5s cubic-bezier(.3,1.6,.5,1)}
+  @keyframes hop{30%{transform:translateY(-14px) scale(1.08)}60%{transform:translateY(0) scale(.96)}}
+  .podpis{font-size:clamp(12px,2vh,20px);font-weight:bold;text-align:center;color:var(--atrament-jasny);line-height:1.2}
+  .podpis b{display:block;font-size:1.35em;color:var(--atrament)}
+
+  /* ---------- bąbelki i konfetti ---------- */
+  #efekty{position:fixed;inset:0;pointer-events:none;z-index:80;overflow:hidden}
+  .babel{
+    position:absolute;border-radius:50%;
+    background:radial-gradient(circle at 32% 26%,
+      rgba(255,255,255,.98) 0%, rgba(255,255,255,.42) 34%,
+      rgba(140,205,230,.30) 68%, rgba(140,205,230,.10) 100%);
+    border:1.5px solid rgba(255,255,255,.75);
+    box-shadow:0 0 12px rgba(255,255,255,.55), inset 0 0 8px rgba(255,255,255,.5);
+    animation-name:babel;animation-timing-function:ease-out;animation-fill-mode:forwards;
+  }
+  @keyframes babel{
+    0%  {transform:translate(0,0) scale(.35);opacity:0}
+    18% {opacity:.95;transform:translate(calc(var(--bx)*.15),calc(var(--by)*.15)) scale(1)}
+    88% {opacity:.75}
+    100%{transform:translate(var(--bx),var(--by)) scale(1.18);opacity:0}
+  }
+  .iskra{position:absolute;width:13px;height:13px;border-radius:3px;animation:iskra .9s ease-out forwards}
+  @keyframes iskra{
+    0%{transform:translate(0,0) rotate(0);opacity:1}
+    100%{transform:translate(var(--ex),var(--ey)) rotate(var(--er));opacity:0}
+  }
+  .brawo{
+    position:fixed;z-index:90;font-size:clamp(26px,5.6vh,58px);font-weight:bold;
+    color:var(--zabawa);text-shadow:0 3px 0 #fff,0 0 18px #fff;pointer-events:none;opacity:0;
+  }
+  .brawo.widac{animation:brawo 1.1s ease-out forwards}
+  @keyframes brawo{
+    0%{opacity:0;transform:translate(-50%,0) scale(.5)}
+    25%{opacity:1;transform:translate(-50%,-30px) scale(1.1)}
+    70%{opacity:1;transform:translate(-50%,-52px) scale(1)}
+    100%{opacity:0;transform:translate(-50%,-90px) scale(.95)}
+  }
+
+  /* ---------- okna ---------- */
+  .panel{
+    position:fixed;inset:0;z-index:100;background:rgba(28,58,46,.55);
+    display:flex;align-items:center;justify-content:center;padding:2vh 2vw;
+  }
+  .panel[hidden]{display:none}
+  .panel-box{
+    position:relative;background:var(--papier);border-radius:22px;
+    padding:clamp(16px,3vh,28px);padding-right:clamp(52px,6vw,64px);
+    width:min(1000px,100%);max-height:96vh;overflow:auto;
+    display:flex;flex-direction:column;gap:16px;
+    -webkit-user-select:text;user-select:text;
+  }
+  .panel-box.waskie{width:min(460px,100%)}
+  .zamknij{
+    position:absolute;top:14px;right:14px;width:42px;height:42px;border-radius:50%;
+    border:2px solid #E2D2CD;background:#F7EDEA;color:#9B2C0F;
+    font-size:20px;line-height:1;cursor:pointer;z-index:2;
+  }
+  .zamknij:hover{background:#F1DED9}
+  .panel-box h2{font-size:clamp(18px,3vh,28px)}
+  .panel-box h3{font-size:15px;color:var(--atrament-jasny);border-bottom:2px solid #E2E9DE;padding-bottom:6px}
+  .panel input,.panel select{
+    font:inherit;font-size:15px;padding:.45em .6em;
+    border:2px solid #CBD6C6;border-radius:10px;background:#F7F9F6;color:var(--atrament);
+    min-width:0;width:100%;
+  }
+  .panel label{font-size:13px;color:var(--atrament-jasny);display:flex;flex-direction:column;gap:4px}
+  .wskazowka{font-size:13px;color:var(--atrament-jasny)}
+
+  /* menu ustawień */
+  .menu{display:flex;flex-direction:column;gap:10px}
+  .menu button{
+    font:inherit;font-size:17px;text-align:left;
+    padding:.85em 1.1em;border-radius:14px;border:2px solid #CBD6C6;
+    background:#F4F7F2;color:var(--atrament);cursor:pointer;
+  }
+  .menu button:hover{background:#E8EFE5}
+  .menu button.glowny{background:var(--zabawa);border-color:var(--zabawa);color:#fff}
+
+  /* edytor */
+  .naglowek-edycja{display:grid;grid-template-columns:auto 1fr 1fr;gap:12px;align-items:end}
+  .uklad-edycja{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .podglad{
+    display:grid;gap:5px;grid-auto-rows:24px;
+    background:#F1F5EF;padding:9px;border-radius:12px;border:2px solid #E2E9DE;
+  }
+  .podglad div{
+    border-radius:6px;background:var(--k);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:bold;padding:0 5px;
+    overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  }
+  .miniatura{
+    position:relative;width:88px;height:88px;flex:0 0 auto;
+    border-radius:14px;border:2px dashed #CBD6C6;background:#F7F9F6;
+    display:flex;align-items:center;justify-content:center;
+    font-size:26px;color:var(--atrament-jasny);cursor:pointer;overflow:hidden;
+  }
+  .miniatura.kolo{border-radius:50%}
+  .miniatura img{width:100%;height:100%;object-fit:cover}
+  .miniatura .skasuj{
+    position:absolute;top:2px;right:2px;width:22px;height:22px;
+    border:none;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;
+    font-size:13px;line-height:1;cursor:pointer;
+  }
+  .pozycja{
+    display:grid;grid-template-columns:88px 1fr auto;gap:12px;
+    padding:12px;border:2px solid #E2E9DE;border-radius:16px;align-items:start;
+  }
+  .pozycja .pola{display:grid;gap:8px}
+  .pozycja .rzad{display:grid;grid-template-columns:82px 82px 58px 1fr;gap:8px}
+  .pozycja .rzad2{display:grid;grid-template-columns:1fr 82px 82px;gap:8px}
+  .pozycja .usun{border:none;background:#F3D9D2;color:#9B2C0F;border-radius:10px;font-size:18px;cursor:pointer;width:40px;height:40px}
+  .panel-akcje{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;padding-top:4px}
+  .panel-akcje .lewo{margin-right:auto}
+  .panel button.akcja{
+    font:inherit;font-size:15px;padding:.6em 1.1em;border-radius:999px;
+    border:2px solid #CBD6C6;background:#F4F7F2;color:var(--atrament);cursor:pointer;
+  }
+  .panel button.glowny{background:var(--zabawa);border-color:var(--zabawa);color:#fff}
+
+  @media (max-width:820px){
+    .naglowek-edycja{grid-template-columns:auto 1fr}
+    .uklad-edycja{grid-template-columns:1fr 1fr}
+    .pozycja{grid-template-columns:64px 1fr auto}
+    .pozycja .rzad,.pozycja .rzad2{grid-template-columns:1fr 1fr}
+    .miniatura{width:64px;height:64px}
+    .rail{flex-basis:110px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+  }
+</style>
+</head>
+<body>
+
+<header class="pasek" id="pasek">
+  <div class="tytul">
+    <img class="awatar" id="awatar" alt="" hidden>
+    <div>
+      <h1 id="tytul-planu">Plan dnia</h1>
+      <p id="nazwa-grupy">Grupa Motylki</p>
+    </div>
+  </div>
+  <div class="zegar">
+    <b id="godzina">--:--</b>
+    <span id="data"></span>
+  </div>
+  <div class="narzedzia">
+    <button class="ikonka" id="btn-cofnij" title="Cofnij ostatnie wrzucenie do kosza" aria-label="Cofnij" disabled>↩</button>
+    <button class="ikonka" id="btn-nowy" title="Nowy dzień — wszystko wraca na planszę" aria-label="Nowy dzień">↻</button>
+    <button class="ikonka" id="btn-ustawienia" title="Ustawienia" aria-label="Ustawienia">⚙️</button>
+  </div>
+  <button class="zwin" id="btn-zwin" title="Zwiń pasek" aria-label="Zwiń pasek">▲</button>
+</header>
+
+<main>
+  <section class="plansza" id="plansza"></section>
+  <aside class="rail">
+    <div class="kosz" id="kosz">
+      <div class="pokrywa"></div>
+      <div class="kubel"></div>
+    </div>
+    <p class="podpis"><b id="licznik">0 z 0</b>zrobione</p>
+  </aside>
+</main>
+
+<div id="efekty"></div>
+<div class="brawo" id="brawo"></div>
+
+<!-- ustawienia -->
+<div class="panel" id="okno-ustawien" hidden>
+  <div class="panel-box waskie">
+    <button class="zamknij" id="btn-zamknij-ust" title="Zamknij" aria-label="Zamknij">✕</button>
+    <h2>Ustawienia</h2>
+    <div class="menu">
+      <button id="btn-edytuj">✏️ Zmień plan i układ</button>
+      <button id="btn-eksport">💾 Zapisz plan do pliku</button>
+      <button id="btn-import">📂 Wczytaj plan z pliku</button>
+      <button id="btn-dzwiek">🔊 Dźwięk: włączony</button>
+      <button id="btn-pelny">⛶ Pełny ekran</button>
+    </div>
+    <p class="wskazowka" id="stan-zapisu">Plan zapisuje się sam w pamięci monitora. Kopię na inny sprzęt zrobisz przyciskiem „Zapisz plan do pliku”.</p>
+  </div>
+</div>
+
+<!-- edytor -->
+<div class="panel" id="okno-edytora" hidden>
+  <div class="panel-box">
+    <button class="zamknij" id="btn-zamknij-ed" title="Zamknij" aria-label="Zamknij">✕</button>
+    <h2>Plan i układ</h2>
+
+    <h3>Nagłówek</h3>
+    <div class="naglowek-edycja">
+      <div class="miniatura kolo" id="mini-grupy" title="Dodaj zdjęcie grupy">📷</div>
+      <label>Tytuł u góry <input id="pole-tytul" type="text" placeholder="Plan dnia"></label>
+      <label>Podpis pod tytułem <input id="pole-grupa" type="text" placeholder="Grupa Motylki"></label>
+    </div>
+
+    <h3>Układ planszy</h3>
+    <div class="uklad-edycja">
+      <label>Liczba kolumn
+        <select id="pole-kolumny">
+          <option value="0">dopasuj sama</option>
+          <option value="2">2</option><option value="3">3</option>
+          <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+        </select>
+      </label>
+      <label>Odstęp między kartami
+        <select id="pole-odstep">
+          <option value="1">ciasny</option><option value="2">średni</option><option value="3">luźny</option>
+        </select>
+      </label>
+      <label>Wielkość napisów
+        <select id="pole-skala">
+          <option value="0.85">mniejsze</option><option value="1">normalne</option><option value="1.2">większe</option>
+        </select>
+      </label>
+    </div>
+    <div class="podglad" id="podglad"></div>
+    <p class="wskazowka">Szerokość i wysokość ustawiasz przy każdym punkcie niżej. Kolejność kart przestawiasz palcem na planszy.</p>
+
+    <h3>Punkty dnia</h3>
+    <div id="wiersze" style="display:grid;gap:10px"></div>
+    <button class="akcja" id="btn-dodaj">+ Dodaj punkt</button>
+
+    <div class="panel-akcje">
+      <button class="akcja lewo" id="btn-domyslny">Przykładowy plan</button>
+      <button class="akcja" id="btn-anuluj">Anuluj</button>
+      <button class="akcja glowny" id="btn-gotowe">Gotowe</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="plik-obraz" accept="image/*" hidden>
+<input type="file" id="plik-json" accept="application/json,.json" hidden>
+
+<script>
+(function(){
+  "use strict";
+
+  const RODZAJE = {
+    posilek:    {etykieta:"posiłek",         zmienna:"--posilek"},
+    higiena:    {etykieta:"higiena",         zmienna:"--higiena"},
+    zabawa:     {etykieta:"zabawa",          zmienna:"--zabawa"},
+    nauka:      {etykieta:"zajęcia",         zmienna:"--nauka"},
+    odpoczynek: {etykieta:"odpoczynek",      zmienna:"--odpoczynek"},
+    dzien:      {etykieta:"początek/koniec", zmienna:"--dzien"}
+  };
+  const ODSTEPY = {1:"clamp(4px,.7vh,9px)", 2:"clamp(8px,1.4vh,18px)", 3:"clamp(14px,2.4vh,30px)"};
+
+  const DOMYSLNY = {
+    tytul:"Plan dnia", grupa:"Grupa Motylki", zdjecieGrupy:null,
+    uklad:{kolumny:0, odstep:2, skala:1},
+    punkty:[
+      {od:"7:00",  do:"8:15",  ikona:"👋", nazwa:"Schodzimy się",      opis:"", rodzaj:"dzien"},
+      {od:"8:15",  do:"8:30",  ikona:"🧼", nazwa:"Mycie rączek",       opis:"Mydło i ciepła woda", rodzaj:"higiena"},
+      {od:"8:30",  do:"9:00",  ikona:"🥣", nazwa:"Śniadanie",          opis:"", rodzaj:"posilek"},
+      {od:"9:00",  do:"9:45",  ikona:"🎨", nazwa:"Zajęcia",            opis:"", rodzaj:"nauka"},
+      {od:"9:45",  do:"10:45", ikona:"🛝", nazwa:"Plac zabaw",         opis:"", rodzaj:"zabawa"},
+      {od:"10:45", do:"11:00", ikona:"🧼", nazwa:"Mycie rączek",       opis:"", rodzaj:"higiena"},
+      {od:"11:00", do:"11:45", ikona:"🍲", nazwa:"Obiad",              opis:"", rodzaj:"posilek"},
+      {od:"11:45", do:"12:45", ikona:"📖", nazwa:"Odpoczynek i bajka", opis:"", rodzaj:"odpoczynek"},
+      {od:"12:45", do:"13:30", ikona:"🧸", nazwa:"Zabawa w kącikach",  opis:"", rodzaj:"zabawa"},
+      {od:"13:30", do:"14:00", ikona:"🍎", nazwa:"Podwieczorek",       opis:"", rodzaj:"posilek"},
+      {od:"14:00", do:"15:00", ikona:"🎵", nazwa:"Muzyka i ruch",      opis:"", rodzaj:"nauka"},
+      {od:"15:00", do:"16:00", ikona:"🏠", nazwa:"Idziemy do domu",    opis:"", rodzaj:"dzien"}
+    ]
+  };
+
+  const POCHWALY = ["Brawo!","Super!","Zuch!","Ekstra!","Świetnie!","Udało się!"];
+
+  const plansza   = document.getElementById("plansza");
+  const kosz      = document.getElementById("kosz");
+  const licznik   = document.getElementById("licznik");
+  const brawoEl   = document.getElementById("brawo");
+  const efekty    = document.getElementById("efekty");
+  const oknoUst   = document.getElementById("okno-ustawien");
+  const oknoEd    = document.getElementById("okno-edytora");
+  const wiersze   = document.getElementById("wiersze");
+  const podglad   = document.getElementById("podglad");
+  const plikObraz = document.getElementById("plik-obraz");
+  const plikJson  = document.getElementById("plik-json");
+  const btnCofnij = document.getElementById("btn-cofnij");
+
+  const spokoj = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let dane = null;
+  let zrobione = new Set();
+  let historia = [];
+  let dzwiekWl = true;
+  let audio = null;
+  let celObrazu = null;
+  let nrId = 0;
+
+  const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const nowyId = () => "p" + (++nrId) + Math.random().toString(36).slice(2,6);
+  const ogranicz = (v,a,b) => Math.min(Math.max(v,a),b);
+
+  function znormalizuj(w){
+    const u = w.uklad || {};
+    return {
+      tytul: w.tytul || "Plan dnia",
+      grupa: w.grupa || "",
+      zdjecieGrupy: w.zdjecieGrupy || null,
+      uklad:{
+        kolumny: ogranicz(parseInt(u.kolumny,10) || 0, 0, 6),
+        odstep:  ODSTEPY[u.odstep] ? Number(u.odstep) : 2,
+        skala:   ogranicz(parseFloat(u.skala) || 1, 0.7, 1.6)
+      },
+      punkty:(w.punkty||[]).map(p => ({
+        _id: nowyId(),
+        od:p.od||"0:00", do:p.do||"0:00",
+        ikona:p.ikona||"⭐", zdjecie:p.zdjecie||null,
+        nazwa:p.nazwa||"Punkt", opis:p.opis||"",
+        rodzaj: RODZAJE[p.rodzaj] ? p.rodzaj : "zabawa",
+        szer: ogranicz(parseInt(p.szer,10)||1,1,4),
+        wys:  ogranicz(parseInt(p.wys,10)||1,1,3)
+      }))
+    };
+  }
+  function doZapisu(){
+    return {
+      tytul:dane.tytul, grupa:dane.grupa, zdjecieGrupy:dane.zdjecieGrupy, uklad:dane.uklad,
+      punkty: dane.punkty.map(p => ({
+        od:p.od, do:p.do, ikona:p.ikona, zdjecie:p.zdjecie,
+        nazwa:p.nazwa, opis:p.opis, rodzaj:p.rodzaj, szer:p.szer, wys:p.wys
+      }))
+    };
+  }
+  const punktPoId = id => dane.punkty.find(p => p._id === id);
+  const autoKolumny = n => n <= 4 ? 2 : n <= 9 ? 3 : n <= 16 ? 4 : 5;
+
+  const KLUCZ = "plan-dnia";
+  let zapisDziala = true;
+
+  function zapisz(){
+    const tekst = JSON.stringify(doZapisu());
+    let ok = false;
+    // pamięć przeglądarki monitora — dzięki temu plan przeżywa wyłączenie
+    try{ window.localStorage.setItem(KLUCZ, tekst); ok = true; }catch(e){}
+    try{ if(window.storage){ window.storage.set(KLUCZ, tekst, false); ok = true; } }catch(e){}
+    zapisDziala = ok;
+    const info = document.getElementById("stan-zapisu");
+    if(info) info.textContent = ok
+      ? "Plan zapisuje się sam w pamięci monitora. Kopię na inny sprzęt zrobisz przyciskiem „Zapisz plan do pliku”."
+      : "Uwaga: nie udaję się zapisać planu w pamięci monitora (może być za dużo zdjęć albo przeglądarka blokuje zapis). Zrób kopię do pliku.";
+  }
+
+  async function wczytaj(){
+    try{
+      const t = window.localStorage.getItem(KLUCZ);
+      if(t) return JSON.parse(t);
+    }catch(e){}
+    try{
+      if(window.storage){
+        const r = await window.storage.get(KLUCZ, false);
+        if(r && r.value) return JSON.parse(r.value);
+      }
+    }catch(e){}
+    return null;
+  }
+
+  /* ---------- zdjęcia ---------- */
+  function przeskaluj(file, cb){
+    const r = new FileReader();
+    r.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 520, s = Math.min(1, max/Math.max(img.width,img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1,Math.round(img.width*s));
+        c.height = Math.max(1,Math.round(img.height*s));
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0,0,c.width,c.height);
+        ctx.drawImage(img,0,0,c.width,c.height);
+        cb(c.toDataURL("image/jpeg",0.78));
+      };
+      img.onerror = () => cb(null);
+      img.src = r.result;
+    };
+    r.readAsDataURL(file);
+  }
+  function ustawMiniature(mini,url){
+    mini._zdjecie = url || null;
+    if(url){
+      mini.innerHTML = `<img alt=""><button class="skasuj" title="Usuń zdjęcie">✕</button>`;
+      mini.querySelector("img").src = url;
+      mini.querySelector(".skasuj").addEventListener("click", ev => { ev.stopPropagation(); ustawMiniature(mini,null); });
+    } else mini.innerHTML = "📷";
+  }
+  function podepnijMiniature(mini){
+    mini.addEventListener("click", () => { celObrazu = mini; plikObraz.value=""; plikObraz.click(); });
+  }
+  plikObraz.addEventListener("change", () => {
+    const f = plikObraz.files && plikObraz.files[0];
+    if(!f || !celObrazu) return;
+    const mini = celObrazu; celObrazu = null;
+    przeskaluj(f, d => { if(d) ustawMiniature(mini,d); });
+  });
+
+  /* ---------- plansza ---------- */
+  const minuty = t => { const [g,m]=String(t).split(":"); return (parseInt(g,10)||0)*60+(parseInt(m,10)||0); };
+  const teraz  = () => { const d=new Date(); return d.getHours()*60+d.getMinutes(); };
+
+  function rysuj(){
+    document.getElementById("tytul-planu").textContent = dane.tytul || "Plan dnia";
+    document.getElementById("nazwa-grupy").textContent = dane.grupa || "";
+    const aw = document.getElementById("awatar");
+    if(dane.zdjecieGrupy){ aw.src = dane.zdjecieGrupy; aw.hidden = false; }
+    else { aw.removeAttribute("src"); aw.hidden = true; }
+
+    const kol = dane.uklad.kolumny || autoKolumny(dane.punkty.length);
+    plansza.style.gridTemplateColumns = `repeat(${kol},minmax(0,1fr))`;
+    plansza.style.setProperty("--gap", ODSTEPY[dane.uklad.odstep]);
+
+    const style = getComputedStyle(document.documentElement);
+    plansza.innerHTML = "";
+    dane.punkty.forEach((p,i) => {
+      const kolor = style.getPropertyValue(RODZAJE[p.rodzaj] ? RODZAJE[p.rodzaj].zmienna : "--dzien").trim();
+      const el = document.createElement("article");
+      el.className = "karta" + (zrobione.has(p._id) ? " zrobiona" : "");
+      el.dataset.id = p._id;
+      el.style.setProperty("--kolor", kolor);
+      el.style.setProperty("--tilt", ((i*37)%7-3)*0.45 + "deg");
+      el.style.setProperty("--skala", dane.uklad.skala);
+      el.style.gridColumn = "span " + Math.min(p.szer, kol);
+      el.style.gridRow    = "span " + p.wys;
+      el.tabIndex = 0;
+      const srodek = p.zdjecie
+        ? `<div class="foto"><img src="${p.zdjecie}" alt=""><span class="ptaszek">✔</span></div>`
+        : `<span class="ikona">${esc(p.ikona||"⭐")}</span><span class="ptaszek">✔</span>`;
+      el.innerHTML =
+        `<span class="czas">${esc(p.od)} – ${esc(p.do)}</span>` + srodek +
+        `<span class="nazwa">${esc(p.nazwa)}</span>` +
+        (p.opis ? `<span class="opis">${esc(p.opis)}</span>` : "");
+      plansza.appendChild(el);
+    });
+    odswiezLicznik();
+    podswietlTeraz();
+  }
+
+  function odswiezLicznik(){
+    licznik.textContent = `${zrobione.size} z ${dane.punkty.length}`;
+    btnCofnij.disabled = historia.length === 0;
+  }
+
+  function podswietlTeraz(){
+    const t = teraz();
+    plansza.querySelectorAll(".karta").forEach(el => {
+      const p = punktPoId(el.dataset.id);
+      if(!p) return;
+      el.classList.toggle("teraz", !el.classList.contains("zrobiona") && t >= minuty(p.od) && t < minuty(p.do));
+    });
+  }
+
+  function zegar(){
+    const d = new Date();
+    document.getElementById("godzina").textContent =
+      String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+    document.getElementById("data").textContent =
+      d.toLocaleDateString("pl-PL",{weekday:"long",day:"numeric",month:"long"});
+    podswietlTeraz();
+  }
+
+  /* ---------- efekty ---------- */
+  function plop(wysoko){
+    if(!dzwiekWl) return;
+    try{
+      audio = audio || new (window.AudioContext||window.webkitAudioContext)();
+      if(audio.state === "suspended") audio.resume();
+      const t = audio.currentTime;
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = "triangle";
+      o.frequency.setValueAtTime(wysoko ? 880 : 430, t);
+      o.frequency.exponentialRampToValueAtTime(wysoko ? 420 : 900, t+0.13);
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.22,t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.38);
+      o.connect(g); g.connect(audio.destination);
+      o.start(t); o.stop(t+0.4);
+    }catch(e){}
+  }
+
+  function babelki(x,y,ile,rozrzut){
+    if(spokoj) return;
+    rozrzut = rozrzut || 40;
+    for(let i=0;i<ile;i++){
+      const b = document.createElement("span");
+      b.className = "babel";
+      const r = 9 + Math.random()*26;
+      b.style.width = r+"px"; b.style.height = r+"px";
+      b.style.left = (x - r/2 + (Math.random()*2-1)*rozrzut)+"px";
+      b.style.top  = (y - r/2 + (Math.random()*2-1)*rozrzut*0.5)+"px";
+      b.style.setProperty("--bx",(Math.random()*2-1)*70+"px");
+      b.style.setProperty("--by",(-110-Math.random()*170)+"px");
+      const czas = 1.1 + Math.random()*1.1;
+      b.style.animationDuration = czas+"s";
+      efekty.appendChild(b);
+      setTimeout(()=>b.remove(), czas*1000+120);
+    }
+  }
+  function iskry(x,y,kolor){
+    if(spokoj) return;
+    const kolory = [kolor,"#F5C518","#3E8C1E","#1F6FB8","#C22B67","#fff"];
+    for(let i=0;i<16;i++){
+      const s = document.createElement("span");
+      s.className = "iskra";
+      s.style.left = x+"px"; s.style.top = y+"px";
+      s.style.background = kolory[i%kolory.length];
+      const kat = Math.random()*Math.PI*2, zas = 80+Math.random()*170;
+      s.style.setProperty("--ex", Math.cos(kat)*zas+"px");
+      s.style.setProperty("--ey", Math.sin(kat)*zas-60+"px");
+      s.style.setProperty("--er", Math.random()*720-360+"deg");
+      efekty.appendChild(s);
+      setTimeout(()=>s.remove(), 950);
+    }
+  }
+  function pochwala(x,y){
+    brawoEl.textContent = POCHWALY[Math.floor(Math.random()*POCHWALY.length)];
+    brawoEl.style.left = x+"px"; brawoEl.style.top = y+"px";
+    brawoEl.classList.remove("widac"); void brawoEl.offsetWidth;
+    brawoEl.classList.add("widac");
+  }
+
+  /* ---------- przeciąganie ---------- */
+  function natRect(el){
+    const stare = el.style.transform;
+    el.style.transform = "none";
+    const r = el.getBoundingClientRect();
+    el.style.transform = stare;
+    return r;
+  }
+  function nadKoszem(x,y){
+    const r = kosz.getBoundingClientRect(), m = 28;
+    return x>r.left-m && x<r.right+m && y>r.top-m && y<r.bottom+m;
+  }
+
+  let sloty = [];
+  function odswiezSloty(pomin){
+    sloty = [];
+    plansza.querySelectorAll(".karta").forEach(el => {
+      if(el === pomin) return;
+      sloty.push({el, r: el.getBoundingClientRect()});
+    });
+  }
+
+  function przestaw(karta, cel){
+    const przed = new Map();
+    plansza.querySelectorAll(".karta").forEach(el => { if(el!==karta) przed.set(el, el.getBoundingClientRect()); });
+    const dzieci = Array.from(plansza.children);
+    if(dzieci.indexOf(karta) < dzieci.indexOf(cel)) cel.after(karta); else cel.before(karta);
+    przed.forEach((r,el) => {
+      const n = el.getBoundingClientRect();
+      const ddx = r.left-n.left, ddy = r.top-n.top;
+      if(Math.abs(ddx)<1 && Math.abs(ddy)<1) return;
+      el.classList.remove("wraca");
+      el.style.setProperty("--dx",ddx+"px"); el.style.setProperty("--dy",ddy+"px");
+      void el.offsetWidth;
+      el.classList.add("wraca");
+      el.style.setProperty("--dx","0px"); el.style.setProperty("--dy","0px");
+      setTimeout(()=>el.classList.remove("wraca"),340);
+    });
+  }
+
+  function zapiszKolejnosc(){
+    const ids = Array.from(plansza.children).map(el => el.dataset.id);
+    dane.punkty.sort((a,b)=>ids.indexOf(a._id)-ids.indexOf(b._id));
+    zapisz();
+  }
+
+  plansza.addEventListener("pointerdown", e => {
+    const karta = e.target.closest(".karta");
+    if(!karta || karta.classList.contains("zrobiona")) return;
+    e.preventDefault();
+    try{ karta.setPointerCapture(e.pointerId); }catch(err){}
+
+    karta.classList.remove("wraca");
+    karta.classList.add("chwytana");
+    let nat = natRect(karta);
+    const chwytX = e.clientX-nat.left, chwytY = e.clientY-nat.top;
+    odswiezSloty(karta);
+    let ostatniaZmiana = 0, ostatniBabel = 0, ruszona = false;
+
+    const ruch = ev => {
+      const dx = ev.clientX-chwytX-nat.left, dy = ev.clientY-chwytY-nat.top;
+      karta.style.setProperty("--dx",dx+"px");
+      karta.style.setProperty("--dy",dy+"px");
+      if(Math.abs(dx)>6 || Math.abs(dy)>6) ruszona = true;
+
+      const t = performance.now();
+      if(ruszona && t-ostatniBabel > 130){ ostatniBabel = t; babelki(ev.clientX, ev.clientY+20, 1, 18); }
+
+      const nadK = nadKoszem(ev.clientX, ev.clientY);
+      kosz.classList.toggle("otwarty", nadK);
+      if(nadK) return;
+
+      const cx = nat.left+dx+nat.width/2, cy = nat.top+dy+nat.height/2;
+      const trafiony = sloty.find(s => cx>s.r.left && cx<s.r.right && cy>s.r.top && cy<s.r.bottom);
+      if(trafiony && t-ostatniaZmiana > 170){
+        ostatniaZmiana = t;
+        przestaw(karta, trafiony.el);
+        nat = natRect(karta);
+        karta.style.setProperty("--dx",(ev.clientX-chwytX-nat.left)+"px");
+        karta.style.setProperty("--dy",(ev.clientY-chwytY-nat.top)+"px");
+        setTimeout(()=>odswiezSloty(karta),350);
+      }
+    };
+    const koniec = ev => {
+      karta.removeEventListener("pointermove",ruch);
+      karta.removeEventListener("pointerup",koniec);
+      karta.removeEventListener("pointercancel",koniec);
+      karta.classList.remove("chwytana");
+      kosz.classList.remove("otwarty");
+      if(nadKoszem(ev.clientX,ev.clientY)) wyrzuc(karta);
+      else { wroc(karta); if(ruszona){ zapiszKolejnosc(); babelki(ev.clientX, ev.clientY, 4, 30); } }
+    };
+    karta.addEventListener("pointermove",ruch);
+    karta.addEventListener("pointerup",koniec);
+    karta.addEventListener("pointercancel",koniec);
+  });
+  plansza.addEventListener("contextmenu", e => e.preventDefault());
+  plansza.addEventListener("dragstart", e => e.preventDefault());
+
+  function wroc(karta){
+    karta.classList.add("wraca");
+    karta.style.setProperty("--dx","0px");
+    karta.style.setProperty("--dy","0px");
+    setTimeout(()=>karta.classList.remove("wraca"),360);
+  }
+
+  function wyrzuc(karta){
+    const dx = parseFloat(karta.style.getPropertyValue("--dx"))||0;
+    const dy = parseFloat(karta.style.getPropertyValue("--dy"))||0;
+    const r = karta.getBoundingClientRect(), k = kosz.getBoundingClientRect();
+    const cx = r.left+r.width/2-dx, cy = r.top+r.height/2-dy;
+    const kx = k.left+k.width/2,    ky = k.top+k.height*0.42;
+
+    karta.classList.add("leci");
+    karta.style.setProperty("--dx",(kx-cx)+"px");
+    karta.style.setProperty("--dy",(ky-cy)+"px");
+    karta.style.setProperty("--sc","0.08");
+    karta.style.setProperty("--rot","22deg");
+    kosz.classList.add("otwarty");
+
+    setTimeout(() => {
+      karta.classList.remove("leci","teraz");
+      ["--dx","--dy","--sc","--rot"].forEach(v=>karta.style.removeProperty(v));
+      karta.classList.add("zrobiona");
+      zrobione.add(karta.dataset.id);
+      historia.push(karta.dataset.id);
+      odswiezLicznik();
+      kosz.classList.remove("otwarty");
+      kosz.classList.add("hop");
+      setTimeout(()=>kosz.classList.remove("hop"),520);
+      babelki(kx,ky,16,46);
+      iskry(kx,ky,karta.style.getPropertyValue("--kolor")||"#3E8C1E");
+      pochwala(kx,k.top);
+      plop(false);
+      podswietlTeraz();
+      zapiszKolejnosc();
+    }, 360);
+  }
+
+  function cofnij(){
+    const id = historia.pop();
+    if(!id){ odswiezLicznik(); return; }
+    zrobione.delete(id);
+    const el = plansza.querySelector('.karta[data-id="'+id+'"]');
+    odswiezLicznik();
+    if(!el) return;
+
+    el.classList.remove("zrobiona");
+    const nat = natRect(el), k = kosz.getBoundingClientRect();
+    const dx = (k.left+k.width/2)-(nat.left+nat.width/2);
+    const dy = (k.top+k.height*0.42)-(nat.top+nat.height/2);
+    el.classList.remove("wraca");
+    el.style.setProperty("--dx",dx+"px");
+    el.style.setProperty("--dy",dy+"px");
+    el.style.setProperty("--sc","0.08");
+    el.style.setProperty("--rot","22deg");
+    void el.offsetWidth;
+    el.classList.add("wraca");
+    ["--dx","--dy","--sc","--rot"].forEach(v=>el.style.removeProperty(v));
+    setTimeout(()=>el.classList.remove("wraca"),380);
+
+    kosz.classList.add("otwarty");
+    setTimeout(()=>kosz.classList.remove("otwarty"),320);
+    babelki(k.left+k.width/2, k.top+k.height*0.3, 7, 34);
+    plop(true);
+    podswietlTeraz();
+  }
+
+  /* ---------- edytor ---------- */
+  function pozycjaHTML(p){
+    const div = document.createElement("div");
+    div.className = "pozycja";
+    const opcje = Object.keys(RODZAJE)
+      .map(k => `<option value="${k}"${k===p.rodzaj?" selected":""}>${RODZAJE[k].etykieta}</option>`).join("");
+    const szerOpcje = [1,2,3,4].map(n => `<option value="${n}"${n===(p.szer||1)?" selected":""}>${n}</option>`).join("");
+    const wysOpcje  = [1,2,3].map(n => `<option value="${n}"${n===(p.wys||1)?" selected":""}>${n}</option>`).join("");
+    div.innerHTML =
+      `<div class="miniatura" title="Dodaj zdjęcie czynności">📷</div>
+       <div class="pola">
+         <div class="rzad">
+           <label>od <input class="p-od" type="text" value="${esc(p.od)}"></label>
+           <label>do <input class="p-do" type="text" value="${esc(p.do)}"></label>
+           <label>emoji <input class="p-ikona" type="text" maxlength="4" value="${esc(p.ikona||"")}"></label>
+           <label>rodzaj <select class="p-rodzaj">${opcje}</select></label>
+         </div>
+         <label>nazwa na karcie <input class="p-nazwa" type="text" value="${esc(p.nazwa)}"></label>
+         <div class="rzad2">
+           <label>opis pod nazwą (nieobowiązkowy) <input class="p-opis" type="text" value="${esc(p.opis||"")}"></label>
+           <label>szerokość <select class="p-szer">${szerOpcje}</select></label>
+           <label>wysokość <select class="p-wys">${wysOpcje}</select></label>
+         </div>
+       </div>
+       <button class="usun" title="Usuń punkt">✕</button>`;
+    div._id = p._id || null;
+    const mini = div.querySelector(".miniatura");
+    podepnijMiniature(mini);
+    ustawMiniature(mini, p.zdjecie||null);
+    div.querySelector(".usun").addEventListener("click", () => { div.remove(); odswiezPodglad(); });
+    return div;
+  }
+
+  const miniGrupy = document.getElementById("mini-grupy");
+  podepnijMiniature(miniGrupy);
+
+  function zbierz(){
+    const punkty = [];
+    wiersze.querySelectorAll(".pozycja").forEach(w => {
+      const nazwa = w.querySelector(".p-nazwa").value.trim();
+      if(!nazwa) return;
+      punkty.push({
+        _id: w._id || nowyId(),
+        od: w.querySelector(".p-od").value.trim() || "0:00",
+        do: w.querySelector(".p-do").value.trim() || "0:00",
+        ikona: w.querySelector(".p-ikona").value.trim() || "⭐",
+        zdjecie: w.querySelector(".miniatura")._zdjecie || null,
+        nazwa: nazwa,
+        opis: w.querySelector(".p-opis").value.trim(),
+        rodzaj: w.querySelector(".p-rodzaj").value,
+        szer: parseInt(w.querySelector(".p-szer").value,10) || 1,
+        wys:  parseInt(w.querySelector(".p-wys").value,10) || 1
+      });
+    });
+    return {
+      tytul: document.getElementById("pole-tytul").value.trim() || "Plan dnia",
+      grupa: document.getElementById("pole-grupa").value.trim(),
+      zdjecieGrupy: miniGrupy._zdjecie || null,
+      uklad:{
+        kolumny: parseInt(document.getElementById("pole-kolumny").value,10) || 0,
+        odstep:  parseInt(document.getElementById("pole-odstep").value,10) || 2,
+        skala:   parseFloat(document.getElementById("pole-skala").value) || 1
+      },
+      punkty: punkty
+    };
+  }
+
+  function odswiezPodglad(){
+    const stan = zbierz();
+    const kol = stan.uklad.kolumny || autoKolumny(stan.punkty.length);
+    podglad.style.gridTemplateColumns = `repeat(${kol},minmax(0,1fr))`;
+    podglad.style.gap = stan.uklad.odstep === 1 ? "3px" : stan.uklad.odstep === 3 ? "9px" : "5px";
+    const style = getComputedStyle(document.documentElement);
+    podglad.innerHTML = "";
+    stan.punkty.forEach(p => {
+      const d = document.createElement("div");
+      d.style.setProperty("--k", style.getPropertyValue(RODZAJE[p.rodzaj].zmienna).trim());
+      d.style.gridColumn = "span " + Math.min(p.szer, kol);
+      d.style.gridRow = "span " + p.wys;
+      d.textContent = p.nazwa;
+      podglad.appendChild(d);
+    });
+  }
+
+  function otworzEdytor(){
+    document.getElementById("pole-tytul").value = dane.tytul || "";
+    document.getElementById("pole-grupa").value = dane.grupa || "";
+    document.getElementById("pole-kolumny").value = String(dane.uklad.kolumny);
+    document.getElementById("pole-odstep").value  = String(dane.uklad.odstep);
+    document.getElementById("pole-skala").value   = String(dane.uklad.skala);
+    ustawMiniature(miniGrupy, dane.zdjecieGrupy||null);
+    wiersze.innerHTML = "";
+    dane.punkty.forEach(p => wiersze.appendChild(pozycjaHTML(p)));
+    odswiezPodglad();
+    oknoUst.hidden = true;
+    oknoEd.hidden = false;
+  }
+
+  function zatwierdz(){
+    const nowe = zbierz();
+    if(!nowe.punkty.length) return;
+    dane = nowe;
+    const zywe = new Set(nowe.punkty.map(p=>p._id));
+    zrobione = new Set([...zrobione].filter(id => zywe.has(id)));
+    historia = historia.filter(id => zywe.has(id));
+    oknoEd.hidden = true;
+    rysuj();
+    zapisz();
+  }
+
+  oknoEd.addEventListener("input", odswiezPodglad);
+  oknoEd.addEventListener("change", odswiezPodglad);
+
+  document.getElementById("btn-dodaj").addEventListener("click", () => {
+    wiersze.appendChild(pozycjaHTML({od:"12:00",do:"12:30",ikona:"⭐",zdjecie:null,nazwa:"Nowy punkt",opis:"",rodzaj:"zabawa",szer:1,wys:1}));
+    odswiezPodglad();
+  });
+  document.getElementById("btn-domyslny").addEventListener("click", () => {
+    dane = znormalizuj(DOMYSLNY);
+    otworzEdytor();
+  });
+  document.getElementById("btn-gotowe").addEventListener("click", zatwierdz);
+  document.getElementById("btn-zamknij-ed").addEventListener("click", zatwierdz);
+  document.getElementById("btn-anuluj").addEventListener("click", () => { oknoEd.hidden = true; });
+  oknoEd.addEventListener("pointerdown", e => { if(e.target === oknoEd) zatwierdz(); });
+
+  /* ---------- ustawienia ---------- */
+  function odswiezMenu(){
+    document.getElementById("btn-dzwiek").textContent = dzwiekWl ? "🔊 Dźwięk: włączony" : "🔇 Dźwięk: wyłączony";
+  }
+  document.getElementById("btn-ustawienia").addEventListener("click", () => { odswiezMenu(); oknoUst.hidden = false; });
+  document.getElementById("btn-zamknij-ust").addEventListener("click", () => oknoUst.hidden = true);
+  oknoUst.addEventListener("pointerdown", e => { if(e.target === oknoUst) oknoUst.hidden = true; });
+  document.getElementById("btn-edytuj").addEventListener("click", otworzEdytor);
+  document.getElementById("btn-dzwiek").addEventListener("click", () => {
+    dzwiekWl = !dzwiekWl; odswiezMenu(); if(dzwiekWl) plop(false);
+  });
+  document.getElementById("btn-pelny").addEventListener("click", () => {
+    if(document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(()=>{});
+    oknoUst.hidden = true;
+  });
+
+  /* ---------- pliki ---------- */
+  document.getElementById("btn-eksport").addEventListener("click", () => {
+    if(!oknoEd.hidden) zatwierdz();
+    const blob = new Blob([JSON.stringify(doZapisu(),null,2)],{type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    const n = (dane.grupa||"grupa").replace(/[^\wąćęłńóśźżĄĆĘŁŃÓŚŹŻ -]/g,"").trim().replace(/\s+/g,"-").toLowerCase();
+    a.download = "plan-dnia-" + (n||"grupa") + ".json";
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500);
+  });
+  document.getElementById("btn-import").addEventListener("click", () => { plikJson.value=""; plikJson.click(); });
+  plikJson.addEventListener("change", () => {
+    const f = plikJson.files && plikJson.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try{
+        const w = JSON.parse(r.result);
+        if(!w || !Array.isArray(w.punkty) || !w.punkty.length) throw new Error("zły plik");
+        dane = znormalizuj(w);
+        zrobione = new Set(); historia = [];
+        rysuj(); zapisz();
+        oknoUst.hidden = true;
+        if(!oknoEd.hidden) otworzEdytor();
+      }catch(e){
+        alert("Nie udało się wczytać tego pliku. Wybierz plik zapisany przyciskiem „Zapisz plan do pliku”.");
+      }
+    };
+    r.readAsText(f);
+  });
+
+  /* ---------- pasek ---------- */
+  document.getElementById("btn-cofnij").addEventListener("click", cofnij);
+  document.getElementById("btn-nowy").addEventListener("click", () => {
+    zrobione = new Set(); historia = []; rysuj();
+  });
+  document.getElementById("btn-zwin").addEventListener("click", e => {
+    const zwin = document.body.classList.toggle("zwiniety");
+    e.currentTarget.title = zwin ? "Rozwiń pasek" : "Zwiń pasek";
+    e.currentTarget.setAttribute("aria-label", e.currentTarget.title);
+  });
+
+  /* ---------- start ---------- */
+  wczytaj().then(z => {
+    dane = znormalizuj(z && Array.isArray(z.punkty) && z.punkty.length ? z : DOMYSLNY);
+    rysuj();
+    zegar();
+    setInterval(zegar, 15000);
+  });
+})();
+</script>
+</body>
+</html>

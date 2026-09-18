@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test tablicy</title>
+<style>
+  body{
+    margin:0;padding:20px;
+    font-family:Verdana,Arial,sans-serif;
+    background:#EDEFEA;color:#16321F;
+    font-size:22px;
+  }
+  h1{font-size:34px;margin:0 0 4px 0}
+  p.pod{margin:0 0 18px 0;color:#4C6B5D;font-size:18px}
+  .box{
+    background:#fff;border:3px solid #D2DBCE;border-radius:14px;
+    padding:14px 18px;margin-bottom:16px;
+  }
+  .box h2{font-size:22px;margin:0 0 10px 0;color:#4C6B5D}
+  #wersja{font-size:44px;font-weight:bold;line-height:1.15}
+  #ua{font-size:15px;color:#4C6B5D;word-wrap:break-word;margin-top:8px}
+  table{border-collapse:collapse;width:100%}
+  td{padding:7px 4px;border-bottom:2px solid #EDEFEA;font-size:21px;vertical-align:middle}
+  td.w{width:56px;font-size:30px;text-align:center;font-weight:bold}
+  .ok{color:#2E7D1E}
+  .zle{color:#B32410}
+  #werdykt{
+    font-size:28px;font-weight:bold;text-align:center;
+    padding:18px;border-radius:14px;
+  }
+  #kwadrat{
+    width:110px;height:110px;background:#D2551F;border-radius:16px;
+    color:#fff;text-align:center;font-weight:bold;font-size:17px;
+    line-height:110px;
+    position:relative;left:0;top:0;
+    -ms-touch-action:none;touch-action:none;
+  }
+  #polednia{
+    height:150px;background:#F5F7F3;border:3px dashed #C6D2C1;border-radius:14px;
+    overflow:hidden;padding:20px;
+  }
+  #wynikdrag{font-size:20px;margin-top:8px;font-weight:bold}
+</style>
+</head>
+<body>
+
+<h1>Test tablicy</h1>
+<p class="pod">Zrób zdjęcie całej strony i wyślij.</p>
+
+<div class="box">
+  <h2>Przeglądarka</h2>
+  <div id="wersja">sprawdzam...</div>
+  <div id="ua"></div>
+</div>
+
+<div class="box">
+  <h2>Co obsługuje</h2>
+  <table id="tabela"></table>
+</div>
+
+<div class="box">
+  <h2>Test przeciągania palcem</h2>
+  <div id="polednia">
+    <div id="kwadrat">przeciągnij</div>
+  </div>
+  <div id="wynikdrag">jeszcze nie próbowano</div>
+</div>
+
+<div class="box" style="padding:0;border:none">
+  <div id="werdykt">liczę...</div>
+</div>
+
+<script>
+(function(){
+  var ua = navigator.userAgent;
+  document.getElementById("ua").innerHTML = ua;
+
+  var m = ua.match(/Chrom(?:e|ium)\/(\d+)/);
+  var wer = m ? parseInt(m[1], 10) : 0;
+  var elWer = document.getElementById("wersja");
+  if(wer){
+    elWer.innerHTML = "Chromium " + wer;
+    elWer.className = wer >= 84 ? "ok" : "zle";
+  }else{
+    elWer.innerHTML = "nie rozpoznano";
+    elWer.className = "zle";
+  }
+
+  function wspiera(prop, wart){
+    try{
+      if(window.CSS && CSS.supports) return CSS.supports(prop, wart);
+      var d = document.createElement("div");
+      d.style[prop] = wart;
+      return d.style[prop] !== "";
+    }catch(e){ return false; }
+  }
+
+  // czy flexbox rozumie gap (Chromium 84+)
+  function flexGap(){
+    try{
+      var f = document.createElement("div");
+      f.style.display = "flex";
+      f.style.gap = "20px";
+      f.style.position = "absolute";
+      f.style.visibility = "hidden";
+      f.appendChild(document.createElement("div"));
+      f.appendChild(document.createElement("div"));
+      f.children[0].style.width = "10px";
+      f.children[1].style.width = "10px";
+      f.children[0].style.height = "1px";
+      f.children[1].style.height = "1px";
+      document.body.appendChild(f);
+      var szer = f.scrollWidth;
+      document.body.removeChild(f);
+      return szer > 25;
+    }catch(e){ return false; }
+  }
+
+  function magazyn(){
+    try{
+      localStorage.setItem("__t", "1");
+      var v = localStorage.getItem("__t");
+      localStorage.removeItem("__t");
+      return v === "1";
+    }catch(e){ return false; }
+  }
+
+  function polskaData(){
+    try{
+      var s = new Date(2026, 8, 4).toLocaleDateString("pl-PL", {weekday:"long"});
+      return /piątek/i.test(s);
+    }catch(e){ return false; }
+  }
+
+  function plotno(){
+    try{
+      var c = document.createElement("canvas");
+      c.width = 4; c.height = 4;
+      return c.toDataURL("image/jpeg").indexOf("data:image/jpeg") === 0;
+    }catch(e){ return false; }
+  }
+
+  function pobieranie(){
+    try{
+      return ("download" in document.createElement("a")) &&
+             !!(window.URL && window.URL.createObjectURL) && !!window.Blob;
+    }catch(e){ return false; }
+  }
+
+  var testy = [
+    ["clamp() w CSS",            wspiera("width", "clamp(10px, 5vw, 30px)")],
+    ["gap we flexboxie",         flexGap()],
+    ["gap w gridzie",            wspiera("grid-gap", "10px") || wspiera("gap", "10px")],
+    ["CSS grid",                 wspiera("display", "grid")],
+    ["aspect-ratio",             wspiera("aspect-ratio", "1 / 1")],
+    ["inset",                    wspiera("inset", "0px")],
+    ["clip-path",                wspiera("clip-path", "polygon(0 0, 100% 0, 50% 100%)")],
+    ["zmienne CSS",              wspiera("--x", "1px") || (window.CSS && CSS.supports && CSS.supports("(--x: 1px)"))],
+    ["dotyk (pointer events)",   ("onpointerdown" in window)],
+    ["pamięć przeglądarki",      magazyn()],
+    ["polskie nazwy dni",        polskaData()],
+    ["przetwarzanie zdjęć",      plotno()],
+    ["pobieranie plików",        pobieranie()]
+  ];
+
+  var t = document.getElementById("tabela");
+  var braki = 0;
+  for(var i = 0; i < testy.length; i++){
+    var tr = document.createElement("tr");
+    var ok = !!testy[i][1];
+    if(!ok) braki++;
+    tr.innerHTML = '<td class="w ' + (ok ? "ok" : "zle") + '">' + (ok ? "OK" : "NIE") +
+                   '</td><td>' + testy[i][0] + '</td>';
+    t.appendChild(tr);
+  }
+
+  var w = document.getElementById("werdykt");
+  if(braki === 0){
+    w.innerHTML = "Wszystko dziala — plan dnia pojdzie bez zmian";
+    w.style.background = "#DCEFD4"; w.style.color = "#2E7D1E";
+  }else if(braki <= 3){
+    w.innerHTML = "Brakuje " + braki + " rzeczy — da sie obejsc";
+    w.style.background = "#FBEFD2"; w.style.color = "#8A5A00";
+  }else{
+    w.innerHTML = "Brakuje " + braki + " rzeczy — przegladarka za stara";
+    w.style.background = "#F7DDD6"; w.style.color = "#B32410";
+  }
+
+  // test przeciągania
+  var kw = document.getElementById("kwadrat");
+  var wynik = document.getElementById("wynikdrag");
+  var startX = 0, startY = 0, aktywny = false, ruchy = 0;
+
+  function start(x, y){ aktywny = true; ruchy = 0; startX = x; startY = y; }
+  function rusz(x, y){
+    if(!aktywny) return;
+    ruchy++;
+    kw.style.left = (x - startX) + "px";
+    kw.style.top  = (y - startY) + "px";
+    wynik.innerHTML = "przesuniete o " + Math.round(x - startX) + " px, klatek: " + ruchy;
+    wynik.className = "ok";
+  }
+  function stop(){ aktywny = false; }
+
+  if("onpointerdown" in window){
+    kw.addEventListener("pointerdown", function(e){
+      e.preventDefault();
+      if(kw.setPointerCapture) try{ kw.setPointerCapture(e.pointerId); }catch(err){}
+      start(e.clientX - parseFloat(kw.style.left || 0), e.clientY - parseFloat(kw.style.top || 0));
+      wynik.innerHTML = "dotyk wykryty (pointer)";
+    });
+    kw.addEventListener("pointermove", function(e){ rusz(e.clientX, e.clientY); });
+    kw.addEventListener("pointerup", stop);
+    kw.addEventListener("pointercancel", stop);
+  }else{
+    kw.addEventListener("touchstart", function(e){
+      e.preventDefault();
+      var t0 = e.touches[0];
+      start(t0.clientX - parseFloat(kw.style.left || 0), t0.clientY - parseFloat(kw.style.top || 0));
+      wynik.innerHTML = "dotyk wykryty (touch, brak pointer events)";
+    }, false);
+    kw.addEventListener("touchmove", function(e){
+      e.preventDefault();
+      rusz(e.touches[0].clientX, e.touches[0].clientY);
+    }, false);
+    kw.addEventListener("touchend", stop, false);
+  }
+})();
+</script>
+</body>
+</html>
