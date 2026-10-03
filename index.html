@@ -98,6 +98,7 @@
     padding:clamp(12px,1.8vh,24px) var(--luz);
   }
   .plansza{
+    position:relative;   /* pozycje kart liczone względem planszy */
     flex:1 1 auto;min-width:0;
     display:grid;
     gap:var(--gap,clamp(8px,1.4vh,18px));
@@ -117,8 +118,11 @@
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.3em;
     padding:clamp(6px,1.1vh,14px);border-radius:var(--r);
     background:var(--kolor);color:#fff;
-    box-shadow:0 6px 0 rgba(0,0,0,.16), 0 10px 22px rgba(20,40,30,.18);
+    /* cień bez rozmycia: tani do narysowania i nie zmienia się przy chwycie */
+    box-shadow:0 5px 0 rgba(0,0,0,.16);
     transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(var(--sc));
+    /* każda karta od startu na własnej warstwie — chwyt nie przerysowuje ekranu */
+    will-change:transform;
     cursor:grab;touch-action:none;overflow:hidden;
   }
   .karta .czas{
@@ -138,23 +142,17 @@
 
   .karta.chwytana{
     --sc:1.06;--rot:1.5deg;cursor:grabbing;z-index:50;
-    box-shadow:0 10px 20px rgba(20,40,30,.35);transition:none;
-    will-change:transform;
+    box-shadow:0 12px 18px rgba(20,40,30,.3);transition:none;
   }
   .karta.wraca,.karta.leci{transition:transform .32s cubic-bezier(.34,1.25,.64,1), opacity .3s}
   .karta.leci{opacity:0}
 
-  /* w trakcie przeciagania gasimy wszystko, co rysuje sie samo z siebie */
+  /* w trakcie przeciągania pulsowanie karty „teraz” stoi */
   body.przeciaga .karta.teraz{animation:none}
-  body.przeciaga .karta:not(.chwytana){box-shadow:0 4px 0 rgba(0,0,0,.14)}
 
-  /* tryb oszczedny dla slabszych tablic */
-  body.oszczedny .karta{box-shadow:0 4px 0 rgba(0,0,0,.18)}
-  body.oszczedny .karta.chwytana{box-shadow:0 8px 16px rgba(20,40,30,.3)}
-  body.oszczedny .karta.teraz{
-    animation:none;
-    box-shadow:0 0 0 5px #fff, 0 0 0 9px var(--kolor);
-  }
+  /* tryb oszczędny dla słabszych tablic */
+  body.oszczedny .karta.chwytana{box-shadow:0 9px 0 rgba(0,0,0,.2)}
+  body.oszczedny .karta.teraz{animation:none}
   body.oszczedny{background-image:none}
 
   .karta.teraz::after{
@@ -163,7 +161,7 @@
     padding:.2em .8em;border-bottom-left-radius:12px;z-index:2;
   }
   .karta.teraz{
-    box-shadow:0 0 0 5px #fff, 0 0 0 9px var(--kolor), 0 10px 22px rgba(20,40,30,.2);
+    box-shadow:0 0 0 5px #fff, 0 0 0 9px var(--kolor);
     animation:tetno 2.4s ease-in-out infinite;
   }
   @keyframes tetno{50%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(1.03)}}
@@ -596,17 +594,20 @@
     }
   }
 
-  /* Mierzy plynnosc przez ~1 s po starcie. Slaba tablica sama wchodzi w tryb oszczedny. */
-  function zmierzPlynnosc(){
-    try{ if(localStorage.getItem("plan-dnia-oszczedny") !== null) return; }catch(e){}
-    let klatki = 0;
-    const start = performance.now();
-    (function licz(){
-      klatki++;
-      const uplyw = performance.now() - start;
-      if(uplyw < 1000) requestAnimationFrame(licz);
-      else if(klatki / (uplyw/1000) < 42) ustawOszczedny(true, false);
-    })();
+  /* Ocenia płynność prawdziwego ciągnięcia (czasy klatek z pętli rysującej).
+     Po dwóch wolnych ciągnięciach tablica sama przechodzi w tryb oszczędny —
+     chyba że ktoś wcześniej ręcznie go wyłączył. */
+  let wolneCiagniecia = 0;
+  function ocenPlynnosc(klatki){
+    if(oszczedny || klatki.length < 20) return;
+    let suma = 0;
+    for(let i=3;i<klatki.length;i++) suma += klatki[i];
+    const srednia = suma / (klatki.length - 3);
+    if(srednia <= 25) return;          /* szybciej niż ok. 40 klatek na sekundę — w porządku */
+    wolneCiagniecia++;
+    if(wolneCiagniecia < 2) return;
+    try{ if(localStorage.getItem("plan-dnia-oszczedny") === "0") return; }catch(e){}
+    ustawOszczedny(true, true);
   }
 
   const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -720,6 +721,7 @@
   const teraz  = () => { const d=new Date(); return d.getHours()*60+d.getMinutes(); };
 
   function rysuj(){
+    porzucCiagniecie();   /* plansza zaraz powstanie od nowa — stare ciągnięcie nie ma już karty */
     document.getElementById("tytul-planu").textContent = dane.tytul || "Plan dnia";
     document.getElementById("nazwa-grupy").textContent = dane.grupa || "";
     const aw = document.getElementById("awatar");
@@ -845,14 +847,21 @@
   }
 
   /* ---------- przeciąganie ---------- */
-  function natRect(el){
-    const stare = el.style.transform;
-    el.style.transform = "none";
-    const r = el.getBoundingClientRect();
-    el.style.transform = stare;
-    return r;
+  /* Jedno ciągnięcie naraz. Ruch i puszczenie palca odbiera cała strona
+     (window), więc przestawienie karty w drzewie strony nie odcina jej od palca. */
+  let ciag = null;
+
+  /* Pozycja karty z układu strony — bez animacji, obrotu i przesunięcia palcem. */
+  function ukladKarty(el, baza){
+    return { left: baza.left + el.offsetLeft, top: baza.top + el.offsetTop,
+             width: el.offsetWidth, height: el.offsetHeight };
   }
-  /* Ramke kosza czytamy raz na przeciagniecie, nie przy kazdym ruchu palca. */
+  function wSrodku(r, x, y, margines){
+    const mx = r.width*margines, my = r.height*margines;
+    return x > r.left+mx && x < r.left+r.width-mx && y > r.top+my && y < r.top+r.height-my;
+  }
+
+  /* Ramkę kosza czytamy raz na przeciągnięcie, nie przy każdym ruchu palca. */
   let koszRect = null;
   function odswiezKosz(){ koszRect = kosz.getBoundingClientRect(); }
   function nadKoszem(x,y){
@@ -860,48 +869,71 @@
     return x>r.left-m && x<r.right+m && y>r.top-m && y<r.bottom+m;
   }
 
-  let sloty = [];
-  function odswiezSloty(pomin){
-    sloty = [];
-    plansza.querySelectorAll(".karta").forEach(el => {
-      if(el === pomin) return;
-      sloty.push({el, r: el.getBoundingClientRect()});
-    });
+  /* Animacja powrotu: jeden timer na kartę, żeby stary nie przerywał nowej animacji. */
+  function animujPowrot(el, ms){
+    clearTimeout(el._wraca);
+    el.classList.add("wraca");
+    el._wraca = setTimeout(() => el.classList.remove("wraca"), ms);
+  }
+  function zatrzymajPowrot(el){
+    clearTimeout(el._wraca);
+    el.classList.remove("wraca");
+  }
+
+  function zmierzUklad(){
+    const c = ciag;
+    c.baza = plansza.getBoundingClientRect();
+    c.nat = ukladKarty(c.karta, c.baza);
+    c.inne = [];
+    const karty = plansza.querySelectorAll(".karta");
+    for(let i=0;i<karty.length;i++){
+      if(karty[i] !== c.karta) c.inne.push({ el: karty[i], r: ukladKarty(karty[i], c.baza) });
+    }
+  }
+
+  /* Aktualne przesunięcie karty na ekranie względem jej miejsca w układzie
+     (środek ramki nie zależy od obrotu ani powiększenia). */
+  function przesuniecie(el, baza){
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width/2  - (baza.left + el.offsetLeft + el.offsetWidth/2),
+             y: r.top  + r.height/2 - (baza.top  + el.offsetTop  + el.offsetHeight/2) };
   }
 
   function przestaw(karta, cel){
-    /* Czytamy wszystkie pozycje naraz, potem wszystkie zapisujemy naraz —
-       inaczej przegladarka przelicza uklad po kazdej karcie z osobna. */
-    const el0 = [], r0 = [];
+    /* Najpierw wszystkie odczyty, potem wszystkie zapisy — jedno przeliczenie układu. */
+    const baza = plansza.getBoundingClientRect();
+    const inne = [];
     const karty = plansza.querySelectorAll(".karta");
     for(let i=0;i<karty.length;i++){
-      if(karty[i] === karta) continue;
-      el0.push(karty[i]); r0.push(karty[i].getBoundingClientRect());
+      const el = karty[i];
+      if(el === karta) continue;
+      const v = przesuniecie(el, baza);
+      inne.push({ el, vx: v.x, vy: v.y, lx: el.offsetLeft, ly: el.offsetTop });
     }
     const dzieci = Array.from(plansza.children);
     if(dzieci.indexOf(karta) < dzieci.indexOf(cel)) cel.after(karta); else cel.before(karta);
 
-    const r1 = el0.map(el => el.getBoundingClientRect());
     const ruszone = [];
-    for(let i=0;i<el0.length;i++){
-      const ddx = r0[i].left-r1[i].left, ddy = r0[i].top-r1[i].top;
-      if(Math.abs(ddx)<1 && Math.abs(ddy)<1) continue;
-      el0[i].classList.remove("wraca");
-      el0[i].style.setProperty("--dx",ddx+"px");
-      el0[i].style.setProperty("--dy",ddy+"px");
-      ruszone.push(el0[i]);
+    for(let i=0;i<inne.length;i++){
+      const s = inne[i];
+      const ddx = s.lx - s.el.offsetLeft, ddy = s.ly - s.el.offsetTop;
+      if(Math.abs(ddx) < 1 && Math.abs(ddy) < 1) continue;
+      ruszone.push(s);
     }
     if(!ruszone.length) return;
+    for(let i=0;i<ruszone.length;i++){
+      const s = ruszone[i];
+      zatrzymajPowrot(s.el);
+      s.el.style.setProperty("--dx", (s.vx + s.lx - s.el.offsetLeft) + "px");
+      s.el.style.setProperty("--dy", (s.vy + s.ly - s.el.offsetTop) + "px");
+    }
     void plansza.offsetWidth;
     requestAnimationFrame(() => {
       for(let i=0;i<ruszone.length;i++){
-        ruszone[i].classList.add("wraca");
-        ruszone[i].style.setProperty("--dx","0px");
-        ruszone[i].style.setProperty("--dy","0px");
+        animujPowrot(ruszone[i].el, 340);
+        ruszone[i].el.style.setProperty("--dx","0px");
+        ruszone[i].el.style.setProperty("--dy","0px");
       }
-      setTimeout(() => {
-        for(let i=0;i<ruszone.length;i++) ruszone[i].classList.remove("wraca");
-      }, 340);
     });
   }
 
@@ -912,85 +944,138 @@
   }
 
   plansza.addEventListener("pointerdown", e => {
+    if(ciag) return;   /* drugi palec, dłoń albo drugie dziecko — ignorujemy */
     const karta = e.target.closest(".karta");
-    if(!karta || karta.classList.contains("zrobiona")) return;
+    if(!karta || karta.classList.contains("zrobiona") || karta.classList.contains("leci")) return;
     e.preventDefault();
     try{ karta.setPointerCapture(e.pointerId); }catch(err){}
 
-    document.body.classList.add("przeciaga");
-    karta.classList.remove("wraca");
+    const v = przesuniecie(karta, plansza.getBoundingClientRect());
+    zatrzymajPowrot(karta);
+    karta.style.setProperty("--dx", v.x+"px");
+    karta.style.setProperty("--dy", v.y+"px");
     karta.classList.add("chwytana");
-    let nat = natRect(karta);
-    const chwytX = e.clientX-nat.left, chwytY = e.clientY-nat.top;
-    odswiezSloty(karta);
+    document.body.classList.add("przeciaga");
+
+    ciag = {
+      karta, id: e.pointerId,
+      x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, brudny: false,
+      ruszona: false, zmiana: 0, blokada: null, punktZmiany: null,
+      ostBabel: 0, klatki: [], ostKlatka: 0, raf: 0
+    };
+    zmierzUklad();
+    ciag.chX = e.clientX - ciag.nat.left - v.x;
+    ciag.chY = e.clientY - ciag.nat.top  - v.y;
     odswiezKosz();
-    let ostatniaZmiana = 0, ostatniBabel = 0, ruszona = false;
-    let ostX = e.clientX, ostY = e.clientY, czeka = false, koniecRuchu = false;
+    ciag.raf = requestAnimationFrame(petla);
+  });
 
-    /* Palec na tablicy potrafi wyslac kilkanascie zdarzen na klatke.
-       Zapamietujemy tylko ostatnia pozycje i rysujemy raz na klatke. */
-    function rysujRuch(){
-      czeka = false;
-      if(koniecRuchu) return;
-      const x = ostX, y = ostY;
-      const dx = x-chwytX-nat.left, dy = y-chwytY-nat.top;
-      karta.style.setProperty("--dx",dx+"px");
-      karta.style.setProperty("--dy",dy+"px");
-      if(Math.abs(dx)>6 || Math.abs(dy)>6) ruszona = true;
+  /* Pętla rysująca działa tylko w trakcie ciągnięcia: raz na klatkę
+     przesuwa kartę do ostatniej pozycji palca i mierzy płynność. */
+  function petla(t){
+    const c = ciag;
+    if(!c) return;
+    if(c.ostKlatka) c.klatki.push(t - c.ostKlatka);
+    c.ostKlatka = t;
+    if(c.brudny){ c.brudny = false; rysujRuch(c, t); }
+    if(ciag === c) c.raf = requestAnimationFrame(petla);
+  }
 
-      const t = performance.now();
-      if(ruszona && !oszczedny && t-ostatniBabel > 200){
-        ostatniBabel = t;
-        babelki(x, y+20, 1, 18);
-      }
+  function rysujRuch(c, t){
+    const x = c.x, y = c.y;
+    const dx = x - c.chX - c.nat.left, dy = y - c.chY - c.nat.top;
+    c.karta.style.setProperty("--dx", dx+"px");
+    c.karta.style.setProperty("--dy", dy+"px");
+    if(!c.ruszona && Math.abs(x - c.startX) + Math.abs(y - c.startY) > 8) c.ruszona = true;
 
-      const nadK = nadKoszem(x,y);
-      if(nadK !== kosz.classList.contains("otwarty")) kosz.classList.toggle("otwarty", nadK);
-      if(nadK) return;
-
-      const cx = nat.left+dx+nat.width/2, cy = nat.top+dy+nat.height/2;
-      let trafiony = null;
-      for(let i=0;i<sloty.length;i++){
-        const r = sloty[i].r;
-        if(cx>r.left && cx<r.right && cy>r.top && cy<r.bottom){ trafiony = sloty[i]; break; }
-      }
-      if(trafiony && t-ostatniaZmiana > 220){
-        ostatniaZmiana = t;
-        przestaw(karta, trafiony.el);
-        nat = natRect(karta);
-        karta.style.setProperty("--dx",(ostX-chwytX-nat.left)+"px");
-        karta.style.setProperty("--dy",(ostY-chwytY-nat.top)+"px");
-        setTimeout(()=>{ if(!koniecRuchu) odswiezSloty(karta); },360);
-      }
+    if(c.ruszona && !oszczedny && t - c.ostBabel > 200){
+      c.ostBabel = t;
+      babelki(x, y+20, 1, 18);
     }
 
-    const ruch = ev => {
-      ostX = ev.clientX; ostY = ev.clientY;
-      if(!czeka){ czeka = true; requestAnimationFrame(rysujRuch); }
-    };
-    const koniec = ev => {
-      koniecRuchu = true;
-      karta.removeEventListener("pointermove",ruch);
-      karta.removeEventListener("pointerup",koniec);
-      karta.removeEventListener("pointercancel",koniec);
-      karta.classList.remove("chwytana");
-      document.body.classList.remove("przeciaga");
-      kosz.classList.remove("otwarty");
-      if(nadKoszem(ev.clientX,ev.clientY)) wyrzuc(karta);
-      else { wroc(karta); if(ruszona){ zapiszKolejnosc(); babelki(ev.clientX, ev.clientY, 4, 30); } }
-    };
-    karta.addEventListener("pointermove",ruch);
-    karta.addEventListener("pointerup",koniec);
-    karta.addEventListener("pointercancel",koniec);
+    const nadK = nadKoszem(x,y);
+    if(nadK !== kosz.classList.contains("otwarty")) kosz.classList.toggle("otwarty", nadK);
+    if(nadK) return;
+
+    /* Blokada zdejmowana dopiero, gdy palec opuści kartę, z którą była ostatnia zamiana. */
+    if(c.blokada){
+      let wciazNad = false;
+      for(let i=0;i<c.inne.length;i++){
+        if(c.inne[i].el === c.blokada){ wciazNad = wSrodku(c.inne[i].r, x, y, 0); break; }
+      }
+      if(!wciazNad) c.blokada = null;
+    }
+    /* Po zamianie palec musi się ruszyć, zanim sprawdzimy kolejną —
+       inaczej przesunięty układ sam wywołuje następne zamiany. */
+    if(c.punktZmiany && Math.abs(x-c.punktZmiany.x) + Math.abs(y-c.punktZmiany.y) < 18) return;
+    if(t - c.zmiana < 90) return;
+
+    let cel = null;
+    for(let i=0;i<c.inne.length;i++){
+      const s = c.inne[i];
+      if(s.el !== c.blokada && wSrodku(s.r, x, y, 0.2)){ cel = s.el; break; }
+    }
+    if(!cel) return;
+
+    przestaw(c.karta, cel);
+    c.zmiana = t;
+    c.blokada = cel;
+    c.punktZmiany = { x, y };
+    zmierzUklad();
+    c.karta.style.setProperty("--dx", (x - c.chX - c.nat.left)+"px");
+    c.karta.style.setProperty("--dy", (y - c.chY - c.nat.top)+"px");
+  }
+
+  /* Przerywa ciągnięcie bez żadnych animacji ani zapisu. */
+  function porzucCiagniecie(){
+    const c = ciag;
+    if(!c) return null;
+    ciag = null;
+    cancelAnimationFrame(c.raf);
+    try{ c.karta.releasePointerCapture(c.id); }catch(e){}
+    c.karta.classList.remove("chwytana");
+    document.body.classList.remove("przeciaga");
+    kosz.classList.remove("otwarty");
+    return c;
+  }
+
+  function zakonczCiagniecie(upuscic, x, y){
+    const c = porzucCiagniecie();
+    if(!c) return;
+    ocenPlynnosc(c.klatki);
+    if(!c.karta.isConnected) return;
+    if(upuscic && nadKoszem(x,y)) wyrzuc(c.karta);
+    else {
+      wroc(c.karta);
+      if(c.ruszona){ zapiszKolejnosc(); if(upuscic) babelki(x, y, 4, 30); }
+    }
+  }
+
+  window.addEventListener("pointermove", e => {
+    if(!ciag || e.pointerId !== ciag.id) return;
+    ciag.x = e.clientX; ciag.y = e.clientY; ciag.brudny = true;
   });
+  window.addEventListener("pointerup", e => {
+    if(ciag && e.pointerId === ciag.id) zakonczCiagniecie(true, e.clientX, e.clientY);
+  });
+  window.addEventListener("pointercancel", e => {
+    if(ciag && e.pointerId === ciag.id) zakonczCiagniecie(false);
+  });
+  /* Siatka bezpieczeństwa: nowy dotyk "główny" znaczy, że poprzedni palec
+     już dawno zszedł z ekranu, a my zgubiliśmy jego puszczenie. */
+  window.addEventListener("pointerdown", e => {
+    if(ciag && e.isPrimary) zakonczCiagniecie(false);
+  }, true);
+  window.addEventListener("blur", () => zakonczCiagniecie(false));
+  document.addEventListener("visibilitychange", () => { if(document.hidden) zakonczCiagniecie(false); });
+
   plansza.addEventListener("contextmenu", e => e.preventDefault());
   plansza.addEventListener("dragstart", e => e.preventDefault());
 
   function wroc(karta){
-    karta.classList.add("wraca");
+    animujPowrot(karta, 360);
     karta.style.setProperty("--dx","0px");
     karta.style.setProperty("--dy","0px");
-    setTimeout(()=>karta.classList.remove("wraca"),360);
   }
 
   function wyrzuc(karta){
@@ -1035,18 +1120,17 @@
     if(!el) return;
 
     el.classList.remove("zrobiona");
-    const nat = natRect(el), k = kosz.getBoundingClientRect();
+    const nat = ukladKarty(el, plansza.getBoundingClientRect()), k = kosz.getBoundingClientRect();
     const dx = (k.left+k.width/2)-(nat.left+nat.width/2);
     const dy = (k.top+k.height*0.42)-(nat.top+nat.height/2);
-    el.classList.remove("wraca");
+    zatrzymajPowrot(el);
     el.style.setProperty("--dx",dx+"px");
     el.style.setProperty("--dy",dy+"px");
     el.style.setProperty("--sc","0.08");
     el.style.setProperty("--rot","22deg");
     void el.offsetWidth;
-    el.classList.add("wraca");
+    animujPowrot(el, 380);
     ["--dx","--dy","--sc","--rot"].forEach(v=>el.style.removeProperty(v));
-    setTimeout(()=>el.classList.remove("wraca"),380);
 
     kosz.classList.add("otwarty");
     setTimeout(()=>kosz.classList.remove("otwarty"),320);
@@ -1463,14 +1547,14 @@
 
   wczytajSzablony();
 
-  window.addEventListener("resize", () => { koszRect = null; });
+  /* zmiana rozmiaru ekranu w trakcie ciągnięcia unieważnia zmierzone pozycje kart */
+  window.addEventListener("resize", () => { koszRect = null; zakonczCiagniecie(false); });
 
   wczytaj().then(z => {
     dane = znormalizuj(z && Array.isArray(z.punkty) && z.punkty.length ? z : DOMYSLNY);
     rysuj();
     zegar();
     setInterval(zegar, 15000);
-    zmierzPlynnosc();
   });
 })();
 </script>
